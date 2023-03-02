@@ -102,6 +102,9 @@ type SysFs interface {
 	GetBlockDeviceScheduler(string) (string, error)
 	// Get device major:minor number string.
 	GetBlockDeviceNumbers(string) (string, error)
+	// Is the device "hidden" (meaning will not have a device handle)
+	// This is the case with native nvme multipathing.
+	IsBlockDeviceHidden(string) bool
 
 	GetNetworkDevices() ([]os.FileInfo, error)
 	GetNetworkAddress(string) (string, error)
@@ -199,6 +202,22 @@ func (fs *realSysFs) GetBlockDeviceNumbers(name string) (string, error) {
 		return "", err
 	}
 	return string(dev), nil
+}
+
+func (fs *realSysFs) IsBlockDeviceHidden(name string) bool {
+	// See: https://www.kernel.org/doc/Documentation/ABI/stable/sysfs-block
+	//      https://git.kernel.org/pub/scm/utils/util-linux/util-linux.git
+	//        - c8487d854ba5 ("lsblk: Ignore hidden devices")
+	hidden, err := ioutil.ReadFile(path.Join(blockDir, name, "/hidden"))
+	if err != nil {
+		// older OS may not have /hidden sysfs entry, so for sure
+		// it is not a hidden device...
+		return false
+	}
+	if string(hidden) == "1" {
+		return true
+	}
+	return false
 }
 
 func (fs *realSysFs) GetBlockDeviceScheduler(name string) (string, error) {
